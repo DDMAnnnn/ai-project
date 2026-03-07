@@ -1,0 +1,13 @@
+{
+    "mode": "NORMAL",
+    "level": 0,
+    "deck": {"deck": []},
+    "playerHealth": 0,
+    "enemy": {
+        "damage": 1,
+        "enemyType": "NORMAL",
+        "name": "Normal Enemy 0",
+        "health": 0,
+        "maxHealth": 0
+    }
+}

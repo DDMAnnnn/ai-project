@@ -1,0 +1,114 @@
+{
+    "mode": "NORMAL",
+    "level": 3,
+    "deck": {"deck": [
+        {
+            "name": "0",
+            "description": "A number card with value 0.",
+            "type": "NUMBER",
+            "value": 0
+        },
+        {
+            "name": "1",
+            "description": "A number card with value 1.",
+            "type": "NUMBER",
+            "value": 1
+        },
+        {
+            "name": "2",
+            "description": "A number card with value 2.",
+            "type": "NUMBER",
+            "value": 2
+        },
+        {
+            "name": "3",
+            "description": "A number card with value 3.",
+            "type": "NUMBER",
+            "value": 3
+        },
+        {
+            "name": "4",
+            "description": "A number card with value 4.",
+            "type": "NUMBER",
+            "value": 4
+        },
+        {
+            "name": "5",
+            "description": "A number card with value 5.",
+            "type": "NUMBER",
+            "value": 5
+        },
+        {
+            "name": "6",
+            "description": "A number card with value 6.",
+            "type": "NUMBER",
+            "value": 6
+        },
+        {
+            "name": "7",
+            "description": "A number card with value 7.",
+            "type": "NUMBER",
+            "value": 7
+        },
+        {
+            "name": "8",
+            "description": "A number card with value 8.",
+            "type": "NUMBER",
+            "value": 8
+        },
+        {
+            "name": "9",
+            "description": "A number card with value 9.",
+            "type": "NUMBER",
+            "value": 9
+        },
+        {
+            "symbol": 43,
+            "name": "+",
+            "description": "A symbol card act as +.",
+            "type": "SYMBOL"
+        },
+        {
+            "symbol": 45,
+            "name": "-",
+            "description": "A symbol card act as -.",
+            "type": "SYMBOL"
+        },
+        {
+            "symbol": 42,
+            "name": "*",
+            "description": "A symbol card act as *.",
+            "type": "SYMBOL"
+        },
+        {
+            "symbol": 47,
+            "name": "/",
+            "description": "A symbol card act as /.",
+            "type": "SYMBOL"
+        },
+        {
+            "name": "merge",
+            "description": "Special card: merge",
+            "type": "SPECIAL"
+        },
+        {
+            "name": "38",
+            "description": "A number card with value 38.",
+            "type": "NUMBER",
+            "value": 38
+        },
+        {
+            "name": "merge",
+            "description": "Special card: merge",
+            "type": "SPECIAL"
+        }
+    ]},
+    "playerHealth": 102,
+    "enemy": {
+        "damage": 3,
+        "enemyType": "ELITE",
+        "name": "Elite Enemy 3",
+        "health": 15,
+        "maxHealth": 15
+    }
+}

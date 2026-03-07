@@ -1,0 +1,31 @@
+{
+    "mode": "NORMAL",
+    "level": 5,
+    "deck": {"deck": [
+        {
+            "name": "41",
+            "description": "A number card with value 41.",
+            "type": "NUMBER",
+            "value": 41
+        },
+        {
+            "symbol": 42,
+            "name": "*",
+            "description": "A symbol card act as *.",
+            "type": "SYMBOL"
+        },
+        {
+            "name": "merge",
+            "description": "Special card: merge",
+            "type": "SPECIAL"
+        }
+    ]},
+    "playerHealth": 110,
+    "enemy": {
+        "damage": 3,
+        "enemyType": "ELITE",
+        "name": "Elite Enemy 5",
+        "health": 25,
+        "maxHealth": 25
+    }
+}

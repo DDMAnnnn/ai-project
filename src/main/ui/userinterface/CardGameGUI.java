@@ -18,7 +18,7 @@ import java.util.List;
 
 // Represents the GUI for the CardGame.
 public class CardGameGUI extends JFrame {
-    private CardGame game;
+    private CoreCardGame game;
 
     private CardLayout cardLayout;
     private StartMenu startMenuPanel;
@@ -241,7 +241,7 @@ public class CardGameGUI extends JFrame {
     // EFFECTS: start or load the game based on user choice.
     public void startOrLoad(String choice) throws IOException {
 
-        game = new CardGame(false, this);
+        game = new CoreCardGame(false, this);
         initGamePanel();
 
         if (choice.equals("start")) {
@@ -298,7 +298,7 @@ public class CardGameGUI extends JFrame {
                 JOptionPane.YES_NO_OPTION);
         if (choice == JOptionPane.YES_OPTION) {
             try {
-                game = new CardGame(false, this);
+                game = new CoreCardGame(false, this);
                 game.start();
                 updateGameStatus();
             } catch (IOException e) {
@@ -308,6 +308,25 @@ public class CardGameGUI extends JFrame {
             dispose();
         }
     }
+
+    // MODIFIES: this
+    // EFFECTS: Handles the victory scenario.
+    public void handleGameWon() {
+        int choice = JOptionPane.showConfirmDialog(this, "Victory! You cleared level " + game.getWinLevel()
+                + ". Would you like to restart?", "Victory", JOptionPane.YES_NO_OPTION);
+        if (choice == JOptionPane.YES_OPTION) {
+            try {
+                game = new CoreCardGame(false, this);
+                game.start();
+                updateGameStatus();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else {
+            dispose();
+        }
+    }
+
 
     // MODIFIES: this
     // EFFECTS: Shows reward options to the user.
@@ -393,7 +412,8 @@ public class CardGameGUI extends JFrame {
     // EFFECTS: Handles viewing the game mode.
     private void handleViewModeAndLevel() {
         JOptionPane.showMessageDialog(this,
-                "Current Mode: " + game.getMode().name() + ", Current level: " + game.getLevel(),
+                "Current Mode: " + game.getMode().name() + ", Current level: " + game.getLevel()
+                        + "/" + game.getWinLevel(),
                 "Game Mode & Level",
                 JOptionPane.INFORMATION_MESSAGE);
     }

@@ -39,6 +39,7 @@ public class ConsoleGame {
     private static final String JSON_STORE_GAME = "./data/gameData.json";
     private static final String JSON_STORE_REWARD = "./data/rewardData.json";
     private static final String JSON_STORE_STATE = "./data/stateData.json";
+    private CoreConsoleGame coreConsole;
 
     // ------------------------------------------------------------------
     // constructor: Construct the card game.
@@ -64,6 +65,7 @@ public class ConsoleGame {
         jsonReaderReward = new JsonReaderReward(JSON_STORE_REWARD);
         jsonWriterState = new JsonWriter(JSON_STORE_STATE);
         jsonReaderState = new JsonReaderState(JSON_STORE_STATE);
+        coreConsole = new CoreConsoleGame();
         if (autostart) {
             startGame();
         }
@@ -194,37 +196,19 @@ public class ConsoleGame {
     // MODIFIES: this
     // EFFECTS: start the game.
     public void startGame() {
-
-        System.out.println("\nWelcome to mathcard!");
-        System.out.println("\t->Start");
-        System.out.println("\t->Load");
-        String option = scanner.next();
-
-        if (option.equalsIgnoreCase("Start")) {
-            System.out.println("Game started!");
-            start();
-        } else if (option.equalsIgnoreCase("Load")) {
-            System.out.println("Welcome back! Game loaded!");
-            load();
-        } else {
-            System.err.println("Invalid input, please retry.");
-            startGame();
-        }
-
+        coreConsole.startGame();
     }
 
     // MODIFIES: this
     // EFFECTS: start the game.
     public void start() {
-        newBattle();
+        coreConsole.start();
     }
 
     // MODIFIES: this
     // EFFECTS: load the game.
     public void load() {
-        loadGameState();
-        loadGame();
-        newBattle();
+        coreConsole.loadAndRun();
     }
 
     // ------------------------------------------------------------------
@@ -1114,9 +1098,7 @@ public class ConsoleGame {
 
     // EFFECTS: manually save the game, will quit upon saving.
     public void saveAndQuit() {
-        autoSave();
-        System.out.println("Game saved successfully.  See you next time!");
-        System.exit(0);
+        coreConsole.saveAndQuit();
     }
 
     // EFFECTS: Automatically save the game at:

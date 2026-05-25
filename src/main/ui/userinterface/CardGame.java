@@ -22,6 +22,7 @@ public class CardGame {
     private int playerHealth;
     private static final int INITIAL_HEALTH = 100;
     private static final int INITIAL_MAX_HEALTH = 150;
+    private static final int WIN_LEVEL = 50;
     private int maxHealth;
     private int level;
     private static final int INITIAL_HAND_SIZE = 5;
@@ -139,6 +140,14 @@ public class CardGame {
 
     public int getMaxHealth() {
         return maxHealth;
+    }
+
+    public int getWinLevel() {
+        return WIN_LEVEL;
+    }
+
+    public boolean isGameWon() {
+        return state == GameState.VICTORY;
     }
 
     // ------------------------------------------------------------------
@@ -1061,13 +1070,25 @@ public class CardGame {
     private void checkBattleStatus() {
         if (currentEnemy.getHealth() <= 0) {
             gui.showMessage("Enemy defeated. Congrats!");
-            rewardStatus();
+            if (level >= WIN_LEVEL) {
+                handleVictory();
+            } else {
+                rewardStatus();
+            }
         } else if (playerHealth <= 0) {
             gui.showMessage("Game over. Player defeated!");
             gui.handleGameOver();
         } else {
             gui.updateGameStatus();
         }
+    }
+
+    // MODIFIES: this, gui
+    // EFFECT: end the game after the player clears the target level.
+    private void handleVictory() {
+        setState(GameState.VICTORY);
+        gui.showMessage("You cleared level " + WIN_LEVEL + ". Victory!");
+        gui.handleGameWon();
     }
 
 }

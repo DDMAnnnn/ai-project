@@ -1,1 +1,7 @@
 *.class
+__pycache__/
+*.py[cod]
+models/
+logs/
+bin/ui/
+.vscode/c_cpp_properties.json

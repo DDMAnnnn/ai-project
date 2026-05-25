@@ -12,6 +12,9 @@ public class Deck implements Writable {
 
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (Boolean.getBoolean("mathcard.silentEventLog")) {
+                return;
+            }
             EventLog eventLog = EventLog.getInstance();
             for (Event event : eventLog) {
                 System.out.println(event);

@@ -46,6 +46,7 @@ def replay_priority_for_level(level):
 def replay_metadata():
     return {
         "source": "human_demo",
+        "state_size": VECTOR_SIZE,
         "encoder_version": ENCODER_VERSION,
         "reward_version": REWARD_VERSION,
         "vector_size": VECTOR_SIZE,

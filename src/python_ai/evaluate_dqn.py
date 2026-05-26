@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument("--watch-level-min", type=int, default=0)
     parser.add_argument("--watch-pause", action="store_true")
     parser.add_argument("--watch-top-actions", type=int, default=5)
+    parser.add_argument("--reward-spike-threshold", type=float, default=1000.0)
     return parser.parse_args()
 
 
@@ -205,6 +206,37 @@ def print_watch_step(
         time.sleep(args.watch_delay)
 
 
+def maybe_log_reward_spike(
+    args,
+    watch_file,
+    episode,
+    step,
+    observation,
+    action,
+    reward,
+    total_reward_before,
+    info,
+):
+    if args.reward_spike_threshold <= 0 or abs(float(reward)) < args.reward_spike_threshold:
+        return
+
+    action_result = info.get("actionResult", {})
+    lines = [
+        "",
+        f"[RewardSpike Eval {episode:04d} Step {step:04d}]",
+        f"reward={float(reward):.2f} totalBefore={float(total_reward_before):.2f} "
+        f"action={action}:{describe_action(action)} "
+        f"legal={action_result.get('legal')} done={info.get('done')} "
+        f"message={action_result.get('message')}",
+        f"before: {format_observation_brief(observation)}",
+        f"hand: {format_cards(observation['handCards'])}",
+    ]
+    if observation["rewardOptions"]:
+        lines.append(f"rewards: {format_cards(observation['rewardOptions'])}")
+    lines.append(f"after: {format_observation_brief(info['observation'])}")
+    emit_watch_lines(lines, watch_file)
+
+
 def summarize(values):
     return {
         "avg": float(np.mean(values)),
@@ -266,6 +298,17 @@ def main():
                 previous_observation = current_observation
                 previous_action_mask = action_mask
                 state, reward, done, action_mask, info = env.step(action)
+                maybe_log_reward_spike(
+                    args,
+                    watch_file,
+                    episode,
+                    step,
+                    previous_observation,
+                    action,
+                    reward,
+                    total_reward,
+                    info,
+                )
                 print_watch_step(
                     args,
                     watch_file,

@@ -41,16 +41,6 @@
   - level 30/40/50 incentive spacing;
   - timeout behavior.
 
-### Defense vs Attack Situation Features
-
-- Design goal: if the player cannot kill this turn, defense should often be preferred because HP does not refresh.
-- Current learning signal uses effective shield reward plus damage-taken penalty.
-- Potential observation features:
-  - `lethalAvailable`;
-  - `bestImmediateDamage`;
-  - `incomingDamageAfterShield`;
-  - `canFullyBlockThisTurn`.
-
 ### Lookahead / Planning
 
 - The drawing pile is known as an unordered multiset; only draw order is unknown.
@@ -69,6 +59,7 @@
 ### Current-Hand Lethal Search
 
 - A narrower and more practical tactical module than general lookahead.
+- Also the cleanest basis for defense-vs-attack situation features.
 - Goal: answer only one deterministic question: can the current visible hand kill the current enemy without relying on future draws?
 - First version should ignore draw uncertainty entirely:
   - use current hand, current `calcValue`, current `operation`, current enemy HP, and legal play/attack rules;
@@ -77,18 +68,29 @@
   - otherwise fall back to the DQN.
 - This is an inference-time tactical override, similar in spirit to card-game "lethal solvers" or chess tactical search.
 - It does not require retraining if used only at eval/watch time, but raw DQN results and DQN+solver results should be reported separately.
+- Key derived fact: `closedHandNoLethal`.
+  - True when the current hand has no draw/resource-generation actions and current-hand lethal search proves there is no lethal line.
+  - This is a deterministic proof that the enemy cannot be killed this turn without introducing new unknown resources.
+  - It should not force defense by itself, but it tells the DQN to stop chasing a nonexistent current-turn kill.
 
 Potential deeper interactions with the AI:
 
 - Observation features:
   - `lethalAvailable`;
+  - `closedHandNoLethal`;
   - `bestCurrentHandDamage`;
   - `lethalDamageRatio`;
   - `minActionsToLethal`.
+  - `incomingDamageAfterShield`;
+  - `canFullyBlockThisTurn`.
 - Reward shaping:
   - define tactical potential such as `bestCurrentHandDamage / enemyHealth`;
   - give a small reward for increasing that potential;
   - keep it light to avoid making the AI chase damage while ignoring defense or deck quality.
+- Defense-vs-attack use:
+  - tactical search provides the kill/no-kill fact;
+  - shield and incoming-damage features provide the safety fact;
+  - DQN still chooses whether no-lethal means defend, attack for setup damage, preserve cards, or end turn.
 - Teacher replay:
   - when lethal exists, store the solver's chosen action as high-quality replay data;
   - useful for teaching execution of existing lethal lines;
@@ -102,8 +104,8 @@ Recommended first implementation, if we choose to build it later:
 1. Current-hand lethal search only.
 2. No draw simulation.
 3. Override only when lethal is guaranteed.
-4. Add optional logging for missed/found lethal.
-5. Later consider adding `lethalAvailable` and `bestCurrentHandDamage` to observation.
+4. Add optional logging for missed/found lethal and `closedHandNoLethal`.
+5. Later consider adding tactical/safety features to observation.
 
 ### NoisyNet
 

@@ -32,7 +32,8 @@ def parse_args():
     parser.add_argument("--watch-level-min", type=int, default=0)
     parser.add_argument("--watch-pause", action="store_true")
     parser.add_argument("--watch-top-actions", type=int, default=5)
-    parser.add_argument("--reward-spike-threshold", type=float, default=1000.0)
+    parser.add_argument("--reward-spike-threshold", type=float, default=2000.0)
+    parser.add_argument("--stop-on-reward-spike", action="store_true")
     return parser.parse_args()
 
 
@@ -218,7 +219,7 @@ def maybe_log_reward_spike(
     info,
 ):
     if args.reward_spike_threshold <= 0 or abs(float(reward)) < args.reward_spike_threshold:
-        return
+        return False
 
     action_result = info.get("actionResult", {})
     lines = [
@@ -235,6 +236,7 @@ def maybe_log_reward_spike(
         lines.append(f"rewards: {format_cards(observation['rewardOptions'])}")
     lines.append(f"after: {format_observation_brief(info['observation'])}")
     emit_watch_lines(lines, watch_file)
+    return True
 
 
 def summarize(values):
@@ -298,7 +300,7 @@ def main():
                 previous_observation = current_observation
                 previous_action_mask = action_mask
                 state, reward, done, action_mask, info = env.step(action)
-                maybe_log_reward_spike(
+                reward_spiked = maybe_log_reward_spike(
                     args,
                     watch_file,
                     episode,
@@ -309,6 +311,8 @@ def main():
                     total_reward,
                     info,
                 )
+                if reward_spiked and args.stop_on_reward_spike:
+                    raise RuntimeError("Stopped on eval reward spike.")
                 print_watch_step(
                     args,
                     watch_file,

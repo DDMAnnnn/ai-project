@@ -65,7 +65,8 @@ def parse_args():
     parser.add_argument("--per-candidate-size", type=int, default=4096)
     parser.add_argument("--reset-per-priorities", action="store_true")
     parser.add_argument("--timeout-penalty", type=float, default=-50.0)
-    parser.add_argument("--reward-spike-threshold", type=float, default=1000.0)
+    parser.add_argument("--reward-spike-threshold", type=float, default=2000.0)
+    parser.add_argument("--stop-on-reward-spike", action="store_true")
     parser.add_argument("--epsilon", type=float, default=None)
     parser.add_argument("--epsilon-min", type=float, default=0.10)
     parser.add_argument("--epsilon-decay", type=float, default=0.999)
@@ -359,7 +360,7 @@ def maybe_log_reward_spike(
     info,
 ):
     if threshold <= 0 or abs(float(reward)) < threshold:
-        return
+        return False
 
     action_result = info.get("actionResult", {})
     next_observation = info.get("observation")
@@ -377,9 +378,18 @@ def maybe_log_reward_spike(
     if observation and observation.get("rewardOptions"):
         print(f"  rewards: {observation.get('rewardOptions', [])}", flush=True)
     print(f"  after: {format_observation_brief(next_observation)}", flush=True)
+    return True
 
 
-def evaluate_agent(agent, episodes, max_steps, label, timeout_penalty, reward_spike_threshold):
+def evaluate_agent(
+    agent,
+    episodes,
+    max_steps,
+    label,
+    timeout_penalty,
+    reward_spike_threshold,
+    stop_on_reward_spike,
+):
     env = MathCardVectorEnv()
     episode_rewards = []
     episode_levels = []
@@ -412,7 +422,7 @@ def evaluate_agent(agent, episodes, max_steps, label, timeout_penalty, reward_sp
                 action_counts[action] += 1
                 previous_observation = current_observation
                 state, reward, done, action_mask, info = env.step(action)
-                maybe_log_reward_spike(
+                reward_spiked = maybe_log_reward_spike(
                     reward_spike_threshold,
                     "eval",
                     episode,
@@ -423,6 +433,8 @@ def evaluate_agent(agent, episodes, max_steps, label, timeout_penalty, reward_sp
                     total_reward,
                     info,
                 )
+                if reward_spiked and stop_on_reward_spike:
+                    raise RuntimeError("Stopped on eval reward spike.")
                 update_boss_stats(boss_stats, info["observation"])
                 total_reward += reward
                 final_info = info
@@ -640,7 +652,7 @@ def main():
                 timed_out = step == args.max_steps and not done
                 transition_done = done or timed_out
                 transition_reward = reward + args.timeout_penalty if timed_out else reward
-                maybe_log_reward_spike(
+                reward_spiked = maybe_log_reward_spike(
                     args.reward_spike_threshold,
                     "train",
                     global_episode,
@@ -651,6 +663,10 @@ def main():
                     episode_reward,
                     info,
                 )
+                if reward_spiked and args.stop_on_reward_spike:
+                    raise RuntimeError(
+                        "Stopped on train reward spike before adding the transition to replay buffer."
+                    )
                 update_boss_stats(boss_stats, info["observation"])
                 if (
                     previous_observation is not None
@@ -789,6 +805,7 @@ def main():
                     label=global_episode,
                     timeout_penalty=args.timeout_penalty,
                     reward_spike_threshold=args.reward_spike_threshold,
+                    stop_on_reward_spike=args.stop_on_reward_spike,
                 )
 
         agent.save(save_path)

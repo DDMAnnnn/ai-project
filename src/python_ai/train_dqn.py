@@ -58,10 +58,12 @@ def parse_args():
     parser.add_argument("--boss-rank-gap-threshold", type=float, default=0.50)
     parser.add_argument("--prioritized-replay", dest="prioritized_replay", action="store_true", default=True)
     parser.add_argument("--no-prioritized-replay", dest="prioritized_replay", action="store_false")
-    parser.add_argument("--per-alpha", type=float, default=0.60)
-    parser.add_argument("--per-beta-start", type=float, default=0.40)
+    parser.add_argument("--per-alpha", type=float, default=0.30)
+    parser.add_argument("--per-beta-start", type=float, default=0.60)
     parser.add_argument("--per-beta-end", type=float, default=1.00)
     parser.add_argument("--per-epsilon", type=float, default=0.001)
+    parser.add_argument("--per-candidate-size", type=int, default=4096)
+    parser.add_argument("--reset-per-priorities", action="store_true")
     parser.add_argument("--timeout-penalty", type=float, default=-50.0)
     parser.add_argument("--epsilon", type=float, default=None)
     parser.add_argument("--epsilon-min", type=float, default=0.10)
@@ -444,7 +446,8 @@ def main():
         f"{args.prioritized_replay} "
         f"alpha={args.per_alpha:.2f} "
         f"beta={args.per_beta_start:.2f}->{args.per_beta_end:.2f} "
-        f"eps={args.per_epsilon:g}"
+        f"eps={args.per_epsilon:g} "
+        f"candidates={args.per_candidate_size}"
     )
 
     env = MathCardVectorEnv()
@@ -508,6 +511,9 @@ def main():
                             f"Loaded replay buffer from: {buffer_path} "
                             f"({len(replay_buffer)} transitions)"
                         )
+                        if args.reset_per_priorities:
+                            replay_buffer.reset_sampling_priorities()
+                            print("Reset replay buffer PER sampling priorities to 1.0")
                     except ValueError as error:
                         print(f"Skipped replay buffer load: {error}")
         else:
@@ -607,6 +613,7 @@ def main():
                             args.batch_size,
                             alpha=args.per_alpha,
                             beta=per_beta,
+                            candidate_size=args.per_candidate_size,
                         )
                         metrics = agent.train_on_batch(batch, sample_weights=sample_weights)
                         replay_buffer.update_sampling_priorities(

@@ -106,7 +106,7 @@ class DQNAgent:
                 "selection_mode": "epsilon_uniform",
             }
 
-        q_values = self.model.predict(np.array([state], dtype=np.float32), verbose=0)[0]
+        q_values = self._predict_q_values(np.array([state], dtype=np.float32))[0]
         greedy_action, greedy_q_value, q_margin = self._select_greedy_action(q_values, legal_actions)
 
         rank_sampling_allowed = (
@@ -146,7 +146,7 @@ class DQNAgent:
         if not legal_actions:
             raise RuntimeError("No legal actions available.")
 
-        q_values = self.model.predict(np.array([state], dtype=np.float32), verbose=0)[0]
+        q_values = self._predict_q_values(np.array([state], dtype=np.float32))[0]
         return self._select_greedy_action(q_values, legal_actions)
 
     def train_on_batch(self, transitions, sample_weights=None):
@@ -160,15 +160,15 @@ class DQNAgent:
             dtype=np.bool_,
         )
 
-        current_q_values = self.model.predict(states, verbose=0)
-        next_online_q_values = self.model.predict(next_states, verbose=0)
+        current_q_values = self._predict_q_values(states)
+        next_online_q_values = self._predict_q_values(next_states)
         masked_next_online_q_values = np.where(next_action_masks, next_online_q_values, -1.0e9)
         best_next_actions = self._batch_select_greedy_actions(
             masked_next_online_q_values,
             next_action_masks,
         )
 
-        next_target_q_values = self.target_model.predict(next_states, verbose=0)
+        next_target_q_values = self._predict_q_values(next_states, model=self.target_model)
         best_next_q_values = next_target_q_values[np.arange(len(transitions)), best_next_actions]
         best_next_q_values = np.where(dones, 0.0, best_next_q_values)
 
@@ -233,6 +233,10 @@ class DQNAgent:
 
     def save(self, path):
         self.model.save(path)
+
+    def _predict_q_values(self, states, model=None):
+        model = model or self.model
+        return model(states, training=False).numpy()
 
     def _legal_actions(self, action_mask):
         return [index for index, allowed in enumerate(action_mask) if allowed]

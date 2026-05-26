@@ -22,6 +22,8 @@ class ReplayBuffer:
     def __init__(self, capacity):
         self.capacity = int(capacity)
         self.memory = []
+        self._retention_priorities = np.zeros(self.capacity, dtype=np.int16)
+        self._sampling_priorities = np.zeros(self.capacity, dtype=np.float32)
         self._max_sampling_priority = 1.0
 
     def add(
@@ -53,7 +55,9 @@ class ReplayBuffer:
             transition.sampling_priority,
         )
         if len(self.memory) < self.capacity:
+            index = len(self.memory)
             self.memory.append(transition)
+            self._set_priority_arrays(index, transition)
             return True
 
         replacement_index = self._replacement_index(transition.priority)
@@ -61,6 +65,7 @@ class ReplayBuffer:
             return False
 
         self.memory[replacement_index] = transition
+        self._set_priority_arrays(replacement_index, transition)
         return True
 
     def sample(self, batch_size):
@@ -71,40 +76,55 @@ class ReplayBuffer:
 
         return random.sample(self.memory, batch_size)
 
-    def sample_prioritized(self, batch_size, alpha=0.6, beta=0.4):
+    def sample_prioritized(self, batch_size, alpha=0.6, beta=0.4, candidate_size=4096):
         if batch_size > len(self.memory):
             raise ValueError(
                 f"Cannot sample {batch_size} transitions from buffer with {len(self.memory)} items."
             )
 
-        priorities = np.array(
-            [transition.sampling_priority for transition in self.memory],
-            dtype=np.float64,
-        )
+        memory_size = len(self.memory)
+        candidate_size = int(candidate_size)
+        if candidate_size <= 0 or candidate_size >= memory_size:
+            candidate_indices = np.arange(memory_size)
+        else:
+            candidate_size = max(batch_size, candidate_size)
+            candidate_indices = np.random.randint(0, memory_size, size=candidate_size)
+
+        priorities = self._sampling_priorities[candidate_indices].astype(np.float64)
         priorities = np.maximum(priorities, 1.0e-12)
         if alpha <= 0.0:
-            probabilities = np.full(len(self.memory), 1.0 / len(self.memory), dtype=np.float64)
+            probabilities = np.full(len(candidate_indices), 1.0 / len(candidate_indices), dtype=np.float64)
         else:
             scaled_priorities = np.power(priorities, float(alpha))
             probabilities = scaled_priorities / np.sum(scaled_priorities)
 
-        indices = np.random.choice(
-            len(self.memory),
+        candidate_positions = np.random.choice(
+            len(candidate_indices),
             size=batch_size,
             replace=True,
             p=probabilities,
         )
-        sample_probabilities = probabilities[indices]
-        weights = np.power(len(self.memory) * sample_probabilities, -float(beta))
+        indices = candidate_indices[candidate_positions]
+        sample_probabilities = probabilities[candidate_positions]
+        weights = np.power(len(candidate_indices) * sample_probabilities, -float(beta))
         weights = weights / np.max(weights)
         transitions = [self.memory[index] for index in indices]
         return transitions, indices, weights.astype(np.float32)
 
     def update_sampling_priorities(self, indices, priorities):
         for index, priority in zip(indices, priorities):
+            index = int(index)
             sampling_priority = max(float(priority), 1.0e-12)
-            self.memory[int(index)].sampling_priority = sampling_priority
+            self.memory[index].sampling_priority = sampling_priority
+            self._sampling_priorities[index] = sampling_priority
             self._max_sampling_priority = max(self._max_sampling_priority, sampling_priority)
+
+    def reset_sampling_priorities(self, value=1.0):
+        sampling_priority = max(float(value), 1.0e-12)
+        for transition in self.memory:
+            transition.sampling_priority = sampling_priority
+        self._sampling_priorities[:len(self.memory)] = sampling_priority
+        self._max_sampling_priority = sampling_priority
 
     def max_sampling_priority(self):
         return self._max_sampling_priority
@@ -126,11 +146,8 @@ class ReplayBuffer:
             [transition.next_action_mask for transition in self.memory],
             dtype=np.bool_,
         )
-        priorities = np.array([transition.priority for transition in self.memory], dtype=np.int16)
-        sampling_priorities = np.array(
-            [transition.sampling_priority for transition in self.memory],
-            dtype=np.float32,
-        )
+        priorities = self._retention_priorities[:len(self.memory)].copy()
+        sampling_priorities = self._sampling_priorities[:len(self.memory)].copy()
 
         np.savez_compressed(
             path,
@@ -190,13 +207,14 @@ class ReplayBuffer:
     def __len__(self):
         return len(self.memory)
 
+    def _set_priority_arrays(self, index, transition):
+        self._retention_priorities[index] = transition.priority
+        self._sampling_priorities[index] = transition.sampling_priority
+
     def _replacement_index(self, new_priority):
-        lowest_priority = min(transition.priority for transition in self.memory)
+        active_priorities = self._retention_priorities[:len(self.memory)]
+        lowest_priority = int(np.min(active_priorities))
         if new_priority < lowest_priority:
             return None
 
-        for index, transition in enumerate(self.memory):
-            if transition.priority == lowest_priority:
-                return index
-
-        return None
+        return int(np.flatnonzero(active_priorities == lowest_priority)[0])

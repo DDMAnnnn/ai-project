@@ -23,7 +23,7 @@ ACTION_COUNT = 37
 WIN_LEVEL = 50
 TRAINING_STATE_FILENAME = "mathcard_dqn_state.json"
 REPLAY_BUFFER_FILENAME = "mathcard_replay_buffer.npz"
-REWARD_VERSION = "boss_reward_v3_deck_quality"
+REWARD_VERSION = "boss_reward_v4_deck_balance"
 MODEL_VERSION = f"{ENCODER_VERSION}_{REWARD_VERSION}_dueling_dqn_v1"
 
 
@@ -47,6 +47,9 @@ def parse_args():
     parser.add_argument("--no-load-model", dest="load_model", action="store_false")
     parser.add_argument("--load-replay-buffer", dest="load_replay_buffer", action="store_true", default=True)
     parser.add_argument("--no-load-replay-buffer", dest="load_replay_buffer", action="store_false")
+    parser.add_argument("--human-demo-replay-buffer", type=str, default="models/human_demo_replay_buffer.npz")
+    parser.add_argument("--load-human-demo-replay", dest="load_human_demo_replay", action="store_true", default=True)
+    parser.add_argument("--no-load-human-demo-replay", dest="load_human_demo_replay", action="store_false")
     parser.add_argument("--learning-rate", type=float, default=0.00025)
     parser.add_argument("--gradient-clip-norm", type=float, default=10.0)
     parser.add_argument("--argmax-tie-epsilon", type=float, default=0.05)
@@ -115,13 +118,21 @@ def project_root():
     return Path(__file__).resolve().parents[2]
 
 
-def deck_data_log_path(path_text):
+def project_path(path_text):
     if not path_text:
         return None
 
     path = Path(path_text).expanduser()
     if not path.is_absolute():
         path = project_root() / path
+    return path
+
+
+def deck_data_log_path(path_text):
+    if not path_text:
+        return None
+
+    path = project_path(path_text)
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -133,6 +144,18 @@ def replay_metadata():
         "encoder_version": ENCODER_VERSION,
         "reward_version": REWARD_VERSION,
     }
+
+
+def load_human_demo_replay_buffer(path, capacity, expected_metadata):
+    if path is None or not path.exists():
+        return None
+
+    replay_buffer, _metadata = ReplayBuffer.load(
+        path,
+        capacity=capacity,
+        expected_metadata=expected_metadata,
+    )
+    return replay_buffer
 
 
 def load_training_state(path):
@@ -545,6 +568,7 @@ def main():
     state_path = training_state_path()
     buffer_path = replay_buffer_path()
     deck_log_path = deck_data_log_path(args.deck_data_log)
+    demo_buffer_path = project_path(args.human_demo_replay_buffer)
     completed_episodes = 0
     recent_rewards = []
     recent_levels = []
@@ -595,6 +619,26 @@ def main():
                         print(f"Skipped replay buffer load: {error}")
         else:
             print(f"No saved model found at: {save_path}. Starting from a new model.")
+
+    if args.load_human_demo_replay and len(replay_buffer) == 0:
+        if demo_buffer_path is not None and demo_buffer_path.exists():
+            try:
+                replay_buffer = load_human_demo_replay_buffer(
+                    demo_buffer_path,
+                    capacity=args.buffer_size,
+                    expected_metadata=replay_metadata(),
+                )
+                print(
+                    f"Seeded replay buffer from human demo: {demo_buffer_path} "
+                    f"({len(replay_buffer)} transitions)"
+                )
+                if args.reset_per_priorities:
+                    replay_buffer.reset_sampling_priorities()
+                    print("Reset human demo PER sampling priorities to 1.0")
+            except ValueError as error:
+                print(f"Skipped human demo replay seed: {error}")
+        elif demo_buffer_path is not None:
+            print(f"No human demo replay found at: {demo_buffer_path}")
 
     if args.epsilon is not None:
         agent.epsilon = args.epsilon

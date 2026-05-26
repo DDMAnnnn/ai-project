@@ -11,7 +11,7 @@ from replay_buffer import ReplayBuffer
 
 
 ACTION_COUNT = 37
-REWARD_VERSION = "boss_reward_v3_deck_quality"
+REWARD_VERSION = "boss_reward_v4_deck_balance"
 
 
 def parse_args():
@@ -188,13 +188,23 @@ def append_jsonl(path, row):
 
 
 def load_or_create_buffer(path, capacity, overwrite):
+    current_metadata = replay_metadata()
     if path.exists() and not overwrite:
-        replay_buffer, metadata = ReplayBuffer.load(path, capacity=capacity)
+        try:
+            replay_buffer, metadata = ReplayBuffer.load(
+                path,
+                capacity=capacity,
+                expected_metadata=current_metadata,
+            )
+        except ValueError as error:
+            print(f"Existing demo buffer is not compatible with this training version: {error}")
+            print("Use --overwrite to start a fresh demo buffer, or --output to write a separate file.")
+            raise SystemExit(1) from error
         print(f"Loaded existing demo buffer: {path} ({len(replay_buffer)} transitions)")
         return replay_buffer, metadata
     if overwrite and path.exists():
         print(f"Overwriting demo buffer: {path}")
-    return ReplayBuffer(capacity=capacity), replay_metadata()
+    return ReplayBuffer(capacity=capacity), current_metadata
 
 
 def record_transition(

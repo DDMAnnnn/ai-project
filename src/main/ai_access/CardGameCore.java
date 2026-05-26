@@ -34,7 +34,7 @@ public class CardGameCore {
     private static final double REMOVE_DECK_QUALITY_REWARD_SCALE = 0.02;
     private static final double REMOVE_DECK_QUALITY_REWARD_LIMIT = 0.10;
     private static final double UNDER_TARGET_REMOVE_PENALTY = 0.02;
-    private static final double[] DRAW_STAGE_WEIGHT = {0.45, 0.90, 1.15, 1.30, 1.45};
+    private static final double[] DRAW_STAGE_WEIGHT = {0.55, 1.05, 1.35, 1.55, 1.75};
     private static final double[] SCALE_STAGE_WEIGHT = {0.25, 0.95, 1.25, 1.50, 1.75};
     private static final double[] CONTROL_STAGE_WEIGHT = {0.30, 0.75, 1.05, 1.35, 1.65};
     private static final double[] RISK_STAGE_WEIGHT = {0.40, 0.80, 1.00, 1.20, 1.40};
@@ -43,6 +43,9 @@ public class CardGameCore {
     private static final double[] CONTROL_TARGET = {1.0, 2.0, 3.0, 4.0, 5.0};
     private static final double[] RISK_TARGET = {1.5, 2.5, 3.5, 4.5, 5.5};
     private static final int[] TARGET_DECK_SIZE = {16, 22, 26, 30, 34};
+    private static final double[] TARGET_NUMBER_RATIO = {0.55, 0.52, 0.50, 0.48, 0.46};
+    private static final double NUMBER_RATIO_TOLERANCE = 0.08;
+    private static final double NUMBER_RATIO_PENALTY_SCALE = 6.0;
     private static final double[][] SMALL_NUMBER_STAGE_BONUS = {
             {0.30, 0.00, -0.20, -0.30, -0.40},
             {0.20, 0.20, 0.00, -0.10, -0.10},
@@ -429,7 +432,17 @@ public class CardGameCore {
         if (stats.symbolCount + stats.specialCount < 4) {
             quality -= (4 - stats.symbolCount - stats.specialCount) * 0.45;
         }
+        quality -= numberRatioPenalty(stats.numberCount, cards.size(), stage);
         return quality;
+    }
+
+    private double numberRatioPenalty(int numberCount, int deckSize, int stage) {
+        if (deckSize <= 0) {
+            return 0.0;
+        }
+        double ratio = (double) numberCount / deckSize;
+        double deviation = Math.abs(ratio - TARGET_NUMBER_RATIO[stage]);
+        return Math.max(0.0, deviation - NUMBER_RATIO_TOLERANCE) * NUMBER_RATIO_PENALTY_SCALE;
     }
 
     private DeckQualityStats deckQualityStats(List<Card> cards) {
@@ -457,8 +470,8 @@ public class CardGameCore {
     private void addSymbolStats(DeckQualityStats stats, char symbol) {
         switch (symbol) {
             case '+':
-                stats.drawAccess += 0.5;
-                stats.scalePower += 0.5;
+                stats.drawAccess += 0.2;
+                stats.scalePower += 0.2;
                 break;
             case '-':
                 stats.drawAccess += 1.0;
@@ -482,7 +495,7 @@ public class CardGameCore {
 
     private void addSpecialStats(DeckQualityStats stats, String name) {
         if (name.equals("draw")) {
-            stats.drawAccess += 1.5;
+            stats.drawAccess += 1.8;
         } else if (name.equals("split")) {
             stats.drawAccess += 0.5;
             stats.controlPower += 1.2;
@@ -526,8 +539,8 @@ public class CardGameCore {
     private CardQualityProfile symbolQualityProfile(char symbol) {
         switch (symbol) {
             case '+':
-                return new CardQualityProfile(0.6, 1.0, 0.5, 0.0, 0.0,
-                        new double[] {0.1, 0.0, -0.1, -0.2, -0.3});
+                return new CardQualityProfile(0.2, 0.45, 0.2, 0.0, 0.0,
+                        new double[] {0.0, -0.1, -0.2, -0.3, -0.4});
             case '-':
                 return new CardQualityProfile(0.6, 2.0, 0.0, 1.3, 0.0,
                         new double[] {0.1, 0.3, 0.5, 0.6, 0.6});
@@ -548,8 +561,8 @@ public class CardGameCore {
 
     private CardQualityProfile specialQualityProfile(String name) {
         if (name.equals("draw")) {
-            return new CardQualityProfile(1.2, 3.2, 0.0, 0.0, 0.0,
-                    new double[] {0.0, 0.4, 0.6, 0.8, 0.9});
+            return new CardQualityProfile(1.35, 3.8, 0.0, 0.0, 0.0,
+                    new double[] {0.1, 0.6, 0.9, 1.1, 1.3});
         } else if (name.equals("split")) {
             return new CardQualityProfile(1.0, 1.0, 0.0, 2.4, 0.0,
                     new double[] {0.0, 0.4, 0.7, 1.0, 1.1});

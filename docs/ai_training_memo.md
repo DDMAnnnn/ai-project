@@ -66,6 +66,45 @@
   - leaf value from the DQN;
   - optional risk penalty for high-variance or bad-tail outcomes.
 
+### Current-Hand Lethal Search
+
+- A narrower and more practical tactical module than general lookahead.
+- Goal: answer only one deterministic question: can the current visible hand kill the current enemy without relying on future draws?
+- First version should ignore draw uncertainty entirely:
+  - use current hand, current `calcValue`, current `operation`, current enemy HP, and legal play/attack rules;
+  - search legal play/attack sequences;
+  - if a lethal sequence exists, execute the first action in that sequence;
+  - otherwise fall back to the DQN.
+- This is an inference-time tactical override, similar in spirit to card-game "lethal solvers" or chess tactical search.
+- It does not require retraining if used only at eval/watch time, but raw DQN results and DQN+solver results should be reported separately.
+
+Potential deeper interactions with the AI:
+
+- Observation features:
+  - `lethalAvailable`;
+  - `bestCurrentHandDamage`;
+  - `lethalDamageRatio`;
+  - `minActionsToLethal`.
+- Reward shaping:
+  - define tactical potential such as `bestCurrentHandDamage / enemyHealth`;
+  - give a small reward for increasing that potential;
+  - keep it light to avoid making the AI chase damage while ignoring defense or deck quality.
+- Teacher replay:
+  - when lethal exists, store the solver's chosen action as high-quality replay data;
+  - useful for teaching execution of existing lethal lines;
+  - less useful for teaching how to set up future lethal hands.
+- Subgoal/options approach:
+  - treat "build lethal hand" and "execute lethal" as separate high-level goals;
+  - powerful but much more complex than a tactical override.
+
+Recommended first implementation, if we choose to build it later:
+
+1. Current-hand lethal search only.
+2. No draw simulation.
+3. Override only when lethal is guaranteed.
+4. Add optional logging for missed/found lethal.
+5. Later consider adding `lethalAvailable` and `bestCurrentHandDamage` to observation.
+
 ### NoisyNet
 
 - Purpose: replace or supplement epsilon-greedy with parameter-space noise, giving more consistent state-dependent exploration.

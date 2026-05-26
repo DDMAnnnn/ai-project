@@ -31,6 +31,9 @@ public class CardGameCore {
     private static final double MISSING_LEVEL_PENALTY = -0.5;
     private static final double DECK_QUALITY_REWARD_SCALE = 0.05;
     private static final double DECK_QUALITY_REWARD_LIMIT = 0.25;
+    private static final double REMOVE_DECK_QUALITY_REWARD_SCALE = 0.02;
+    private static final double REMOVE_DECK_QUALITY_REWARD_LIMIT = 0.10;
+    private static final double UNDER_TARGET_REMOVE_PENALTY = 0.02;
     private static final double[] DRAW_STAGE_WEIGHT = {0.45, 0.90, 1.15, 1.30, 1.45};
     private static final double[] SCALE_STAGE_WEIGHT = {0.25, 0.95, 1.25, 1.50, 1.75};
     private static final double[] CONTROL_STAGE_WEIGHT = {0.30, 0.75, 1.05, 1.35, 1.65};
@@ -316,6 +319,7 @@ public class CardGameCore {
         String chosenOption = rewards.get(rewardIndex);
         int evaluationLevel = rewardEvaluationLevel();
         double qualityBefore = deckQuality(deck.getDeck(), evaluationLevel);
+        int deckSizeBefore = deck.getDeck().size();
         double reward = 0.0;
         String message = "reward chosen";
         if (chosenOption.equals("Skip")) {
@@ -324,7 +328,10 @@ public class CardGameCore {
             RemovalChoice removalChoice = bestRemovalChoice(evaluationLevel);
             Card removedCard = autoRemoveWorstCard(removalChoice);
             if (removalChoice != null) {
-                reward = deckQualityReward(removalChoice.qualityAfter - qualityBefore);
+                reward = removeDeckQualityReward(
+                        removalChoice.qualityAfter - qualityBefore,
+                        deckSizeBefore,
+                        evaluationLevel);
             }
             finishRewardAndStartNextBattle();
             if (removedCard == null) {
@@ -384,6 +391,28 @@ public class CardGameCore {
         return Math.max(-DECK_QUALITY_REWARD_LIMIT, Math.min(DECK_QUALITY_REWARD_LIMIT, scaledReward));
     }
 
+    private double removeDeckQualityReward(double qualityDelta, int deckSizeBefore, int evaluationLevel) {
+        double scaledReward = qualityDelta * REMOVE_DECK_QUALITY_REWARD_SCALE;
+        double clippedReward = Math.max(
+                -REMOVE_DECK_QUALITY_REWARD_LIMIT,
+                Math.min(REMOVE_DECK_QUALITY_REWARD_LIMIT, scaledReward));
+        int targetDeckSize = targetDeckSize(evaluationLevel);
+
+        if (qualityDelta > 0.0 && deckSizeBefore <= targetDeckSize) {
+            clippedReward = 0.0;
+        }
+        if (deckSizeBefore < targetDeckSize) {
+            double missingCardPenalty = Math.min(
+                    REMOVE_DECK_QUALITY_REWARD_LIMIT,
+                    (targetDeckSize - deckSizeBefore) * UNDER_TARGET_REMOVE_PENALTY);
+            clippedReward -= missingCardPenalty;
+        }
+
+        return Math.max(
+                -REMOVE_DECK_QUALITY_REWARD_LIMIT,
+                Math.min(REMOVE_DECK_QUALITY_REWARD_LIMIT, clippedReward));
+    }
+
     private double deckQuality(List<Card> cards, int evaluationLevel) {
         int stage = stageIndex(evaluationLevel);
         DeckQualityStats stats = deckQualityStats(cards);
@@ -392,7 +421,7 @@ public class CardGameCore {
             quality += cardQuality(card, stats, stage);
         }
 
-        int bloat = Math.max(0, cards.size() - TARGET_DECK_SIZE[stage]);
+        int bloat = Math.max(0, cards.size() - targetDeckSize(evaluationLevel));
         quality -= bloat * 0.12;
         if (stats.numberCount < 6) {
             quality -= (6 - stats.numberCount) * 0.75;
@@ -559,6 +588,10 @@ public class CardGameCore {
     private int stageIndex(int evaluationLevel) {
         int normalizedLevel = Math.max(1, evaluationLevel);
         return Math.min(4, (normalizedLevel - 1) / 10);
+    }
+
+    private int targetDeckSize(int evaluationLevel) {
+        return TARGET_DECK_SIZE[stageIndex(evaluationLevel)];
     }
 
     private void finishRewardAndStartNextBattle() {

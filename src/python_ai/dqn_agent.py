@@ -149,7 +149,7 @@ class DQNAgent:
         q_values = self.model.predict(np.array([state], dtype=np.float32), verbose=0)[0]
         return self._select_greedy_action(q_values, legal_actions)
 
-    def train_on_batch(self, transitions):
+    def train_on_batch(self, transitions, sample_weights=None):
         states = np.array([transition.state for transition in transitions], dtype=np.float32)
         next_states = np.array([transition.next_state for transition in transitions], dtype=np.float32)
         actions = np.array([transition.action for transition in transitions], dtype=np.int32)
@@ -198,11 +198,21 @@ class DQNAgent:
             ]
         )
 
-        history = self.model.fit(states, target_q_values, epochs=1, verbose=0)
+        if sample_weights is not None:
+            sample_weights = np.array(sample_weights, dtype=np.float32)
+
+        history = self.model.fit(
+            states,
+            target_q_values,
+            sample_weight=sample_weights,
+            epochs=1,
+            verbose=0,
+        )
         return {
             "loss": float(history.history["loss"][0]),
             "pred_q_mean": float(np.mean(predicted_action_q_values)),
             "target_q_mean": float(np.mean(target_action_q_values)),
+            "td_errors": td_errors.astype(np.float32),
             "td_abs_mean": float(np.mean(np.abs(td_errors))),
             "td_abs_max": float(np.max(np.abs(td_errors))),
             "q_abs_max": float(

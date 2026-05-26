@@ -23,6 +23,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate a trained MathCard DQN model.")
     parser.add_argument("--episodes", type=int, default=10)
     parser.add_argument("--max-steps", type=int, default=3000)
+    parser.add_argument("--timeout-penalty", type=float, default=-50.0)
     parser.add_argument("--model", type=str, default=None)
     parser.add_argument("--argmax-tie-epsilon", type=float, default=0.05)
     parser.add_argument("--watch", action="store_true")
@@ -289,6 +290,7 @@ def main():
 
             if not done:
                 timeouts += 1
+                total_reward += args.timeout_penalty
 
             observation = final_info["observation"]
             episode_rewards.append(total_reward)

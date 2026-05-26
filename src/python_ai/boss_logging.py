@@ -1,4 +1,4 @@
-AGGREGATE_BOSS_LEVEL = 20
+BOSS_LEVELS = [10, 20, 30, 40, 50]
 
 
 def is_boss_level(level):
@@ -123,30 +123,47 @@ def latest_sampled_boss_stats(boss_stats):
 
 
 def format_boss_aggregate(start_episode, end_episode, boss_stats_window):
-    aggregate = aggregate_boss_stats(boss_stats_window)
+    aggregate_by_level = aggregate_boss_stats_by_level(boss_stats_window)
+    if not aggregate_by_level:
+        return f"BossAgg {start_episode:04d}-{end_episode:04d} | none"
+
+    parts = []
+    for level in sorted(aggregate_by_level):
+        aggregate = aggregate_by_level[level]
+        parts.append(
+            f"L{level:02d} clear={aggregate['clear']}/{aggregate['seen']} "
+            f"dmgAvg={aggregate['damage_avg']:.1f}"
+        )
+
     return (
         f"BossAgg {start_episode:04d}-{end_episode:04d} | "
-        f"clear={aggregate['clear']} | "
-        f"dmgAvg={aggregate['damage_avg']:.1f} | "
-        f"actualTop={format_action_counts(aggregate['actual_action_counts'], limit=10)} | "
-        f"qTop={format_action_counts(aggregate['q_action_counts'], limit=10)}"
+        + " | ".join(parts)
     )
 
 
-def aggregate_boss_stats(boss_stats_window):
-    aggregate = {
-        "seen": 0,
-        "clear": 0,
-        "damage_sum": 0.0,
-        "actual_action_counts": {},
-        "q_action_counts": {},
+def aggregate_boss_stats_by_level(boss_stats_window):
+    aggregate_by_level = {
+        level: {
+            "seen": 0,
+            "clear": 0,
+            "damage_sum": 0.0,
+            "damage_avg": 0.0,
+        }
+        for level in BOSS_LEVELS
     }
 
     for boss_stats in boss_stats_window:
         for stats in boss_stats.values():
-            if int(stats["level"]) != AGGREGATE_BOSS_LEVEL:
-                continue
+            level = int(stats["level"])
+            if level not in aggregate_by_level:
+                aggregate_by_level[level] = {
+                    "seen": 0,
+                    "clear": 0,
+                    "damage_sum": 0.0,
+                    "damage_avg": 0.0,
+                }
 
+            aggregate = aggregate_by_level[level]
             aggregate["seen"] += 1
             if stats["result"] in ["cleared", "victory"]:
                 aggregate["clear"] += 1
@@ -155,15 +172,12 @@ def aggregate_boss_stats(boss_stats_window):
             end_enemy_health = max(0, int(stats["end_enemy_health"]))
             damage = min(entry_enemy_health, max(0, entry_enemy_health - end_enemy_health))
             aggregate["damage_sum"] += damage
-            merge_action_counts(aggregate["actual_action_counts"], stats["actual_action_counts"])
-            merge_action_counts(aggregate["q_action_counts"], stats["q_action_counts"])
 
-    if aggregate["seen"] > 0:
-        aggregate["damage_avg"] = aggregate["damage_sum"] / aggregate["seen"]
-    else:
-        aggregate["damage_avg"] = 0.0
+    for aggregate in aggregate_by_level.values():
+        if aggregate["seen"] > 0:
+            aggregate["damage_avg"] = aggregate["damage_sum"] / aggregate["seen"]
 
-    return aggregate
+    return aggregate_by_level
 
 
 def merge_action_counts(target_counts, source_counts):

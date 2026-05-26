@@ -56,7 +56,13 @@ def parse_args():
     parser.add_argument("--boss-rank-sampling-prob", type=float, default=0.20)
     parser.add_argument("--boss-rank-top-k", type=int, default=3)
     parser.add_argument("--boss-rank-gap-threshold", type=float, default=0.50)
-    parser.add_argument("--timeout-penalty", type=float, default=-20.0)
+    parser.add_argument("--prioritized-replay", dest="prioritized_replay", action="store_true", default=True)
+    parser.add_argument("--no-prioritized-replay", dest="prioritized_replay", action="store_false")
+    parser.add_argument("--per-alpha", type=float, default=0.60)
+    parser.add_argument("--per-beta-start", type=float, default=0.40)
+    parser.add_argument("--per-beta-end", type=float, default=1.00)
+    parser.add_argument("--per-epsilon", type=float, default=0.001)
+    parser.add_argument("--timeout-penalty", type=float, default=-50.0)
     parser.add_argument("--epsilon", type=float, default=None)
     parser.add_argument("--epsilon-min", type=float, default=0.10)
     parser.add_argument("--epsilon-decay", type=float, default=0.999)
@@ -209,6 +215,15 @@ def replay_priority_for_level(level):
     return (level - 1) // 10
 
 
+def prioritized_replay_beta(args, episode):
+    if args.episodes <= 1:
+        return float(args.per_beta_end)
+
+    progress = float(episode - 1) / float(max(1, args.episodes - 1))
+    progress = float(np.clip(progress, 0.0, 1.0))
+    return float(args.per_beta_start + progress * (args.per_beta_end - args.per_beta_start))
+
+
 def reward_option_from_observation(observation, action):
     reward_index = action - 32
     reward_options = observation.get("rewardOptions", [])
@@ -309,7 +324,7 @@ def summarize(values):
     }
 
 
-def evaluate_agent(agent, episodes, max_steps, label):
+def evaluate_agent(agent, episodes, max_steps, label, timeout_penalty):
     env = MathCardVectorEnv()
     episode_rewards = []
     episode_levels = []
@@ -351,6 +366,7 @@ def evaluate_agent(agent, episodes, max_steps, label):
 
             if not done:
                 timeouts += 1
+                total_reward += timeout_penalty
 
             observation = final_info["observation"]
             episode_rewards.append(total_reward)
@@ -422,6 +438,13 @@ def main():
         f"prob={args.boss_rank_sampling_prob:.2f} "
         f"topK={args.boss_rank_top_k} "
         f"gap<={args.boss_rank_gap_threshold:.2f}"
+    )
+    print(
+        "Prioritized replay: "
+        f"{args.prioritized_replay} "
+        f"alpha={args.per_alpha:.2f} "
+        f"beta={args.per_beta_start:.2f}->{args.per_beta_end:.2f} "
+        f"eps={args.per_epsilon:g}"
     )
 
     env = MathCardVectorEnv()
@@ -578,8 +601,23 @@ def main():
                     and len(replay_buffer) >= args.batch_size
                     and total_steps % max(1, args.train_every) == 0
                 ):
-                    batch = replay_buffer.sample(args.batch_size)
-                    metrics = agent.train_on_batch(batch)
+                    if args.prioritized_replay:
+                        per_beta = prioritized_replay_beta(args, episode)
+                        batch, batch_indices, sample_weights = replay_buffer.sample_prioritized(
+                            args.batch_size,
+                            alpha=args.per_alpha,
+                            beta=per_beta,
+                        )
+                        metrics = agent.train_on_batch(batch, sample_weights=sample_weights)
+                        replay_buffer.update_sampling_priorities(
+                            batch_indices,
+                            np.abs(metrics["td_errors"]) + args.per_epsilon,
+                        )
+                        metrics["per_beta"] = per_beta
+                        metrics["is_weight_mean"] = float(np.mean(sample_weights))
+                    else:
+                        batch = replay_buffer.sample(args.batch_size)
+                        metrics = agent.train_on_batch(batch)
                     training_metrics.append(metrics)
                     if args.target_update_mode == "soft":
                         agent.soft_update_target_model(args.target_update_tau)
@@ -666,6 +704,7 @@ def main():
                     episodes=args.eval_episodes,
                     max_steps=args.eval_max_steps or args.max_steps,
                     label=global_episode,
+                    timeout_penalty=args.timeout_penalty,
                 )
 
         agent.save(save_path)

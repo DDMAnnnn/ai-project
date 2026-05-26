@@ -684,6 +684,7 @@ def main():
                     next_state=next_state,
                     done=transition_done,
                     next_action_mask=next_action_mask,
+                    action_mask=action_mask,
                     priority=replay_priority_for_level(info["observation"]["level"]),
                 )
 

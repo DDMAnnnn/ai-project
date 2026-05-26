@@ -14,6 +14,7 @@ class Transition:
     next_state: list
     done: bool
     next_action_mask: list
+    action_mask: list | None = None
     priority: int = 0
     sampling_priority: float = 1.0
 
@@ -34,6 +35,7 @@ class ReplayBuffer:
         next_state,
         done,
         next_action_mask,
+        action_mask=None,
         priority=0,
         sampling_priority=None,
     ):
@@ -47,6 +49,7 @@ class ReplayBuffer:
             next_state=next_state,
             done=done,
             next_action_mask=next_action_mask,
+            action_mask=action_mask,
             priority=int(priority),
             sampling_priority=float(sampling_priority),
         )
@@ -131,7 +134,7 @@ class ReplayBuffer:
 
     def save(self, path, metadata=None):
         path = Path(path)
-        path.parent.mkdir(exist_ok=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
 
         metadata = metadata or {}
         states = np.array([transition.state for transition in self.memory], dtype=np.float32)
@@ -146,6 +149,15 @@ class ReplayBuffer:
             [transition.next_action_mask for transition in self.memory],
             dtype=np.bool_,
         )
+        action_masks = np.array(
+            [
+                transition.action_mask
+                if transition.action_mask is not None
+                else [True] * len(transition.next_action_mask)
+                for transition in self.memory
+            ],
+            dtype=np.bool_,
+        )
         priorities = self._retention_priorities[:len(self.memory)].copy()
         sampling_priorities = self._sampling_priorities[:len(self.memory)].copy()
 
@@ -156,6 +168,7 @@ class ReplayBuffer:
             actions=actions,
             rewards=rewards,
             dones=dones,
+            action_masks=action_masks,
             next_action_masks=next_action_masks,
             priorities=priorities,
             sampling_priorities=sampling_priorities,
@@ -183,6 +196,11 @@ class ReplayBuffer:
             rewards = data["rewards"]
             dones = data["dones"]
             next_action_masks = data["next_action_masks"]
+            action_masks = (
+                data["action_masks"]
+                if "action_masks" in data
+                else np.ones_like(next_action_masks, dtype=np.bool_)
+            )
             priorities = data["priorities"] if "priorities" in data else np.zeros(len(actions))
             sampling_priorities = (
                 data["sampling_priorities"]
@@ -198,6 +216,7 @@ class ReplayBuffer:
                     next_state=next_states[index].astype(np.float32).tolist(),
                     done=bool(dones[index]),
                     next_action_mask=next_action_masks[index].astype(bool).tolist(),
+                    action_mask=action_masks[index].astype(bool).tolist(),
                     priority=int(priorities[index]),
                     sampling_priority=float(sampling_priorities[index]),
                 )

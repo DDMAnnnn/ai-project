@@ -187,6 +187,31 @@ def append_jsonl(path, row):
         file.write(json.dumps(row, ensure_ascii=True) + "\n")
 
 
+def sanitize_filename_part(value):
+    text = str(value or "unknown")
+    return "".join(char if char.isalnum() or char in ["-", "_"] else "_" for char in text)
+
+
+def read_replay_metadata(path):
+    with np.load(path, allow_pickle=False) as data:
+        return json.loads(str(data["metadata_json"]))
+
+
+def archive_incompatible_buffer(path):
+    metadata = read_replay_metadata(path)
+    reward_version = sanitize_filename_part(metadata.get("reward_version"))
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    archive_path = path.with_name(f"{path.stem}.{reward_version}.{timestamp}{path.suffix}")
+    counter = 1
+    while archive_path.exists():
+        archive_path = path.with_name(
+            f"{path.stem}.{reward_version}.{timestamp}.{counter}{path.suffix}"
+        )
+        counter += 1
+    path.rename(archive_path)
+    return archive_path
+
+
 def load_or_create_buffer(path, capacity, overwrite):
     current_metadata = replay_metadata()
     if path.exists() and not overwrite:
@@ -198,8 +223,10 @@ def load_or_create_buffer(path, capacity, overwrite):
             )
         except ValueError as error:
             print(f"Existing demo buffer is not compatible with this training version: {error}")
-            print("Use --overwrite to start a fresh demo buffer, or --output to write a separate file.")
-            raise SystemExit(1) from error
+            archive_path = archive_incompatible_buffer(path)
+            print(f"Archived incompatible demo buffer to: {archive_path}")
+            print("Starting a fresh demo buffer for the current training version.")
+            return ReplayBuffer(capacity=capacity), current_metadata
         print(f"Loaded existing demo buffer: {path} ({len(replay_buffer)} transitions)")
         return replay_buffer, metadata
     if overwrite and path.exists():
@@ -241,6 +268,8 @@ def record_transition(
         jsonl_path,
         {
             "recorded_at": datetime.now(timezone.utc).isoformat(),
+            "encoder_version": ENCODER_VERSION,
+            "reward_version": REWARD_VERSION,
             "episode": int(episode),
             "step": int(step),
             "action": int(action),

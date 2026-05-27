@@ -12,6 +12,19 @@ class DuelingQValues(tf.keras.layers.Layer):
         return value + centered_advantage
 
 
+@tf.keras.utils.register_keras_serializable(package="MathCard")
+class MaskedDuelingQValues(tf.keras.layers.Layer):
+    def call(self, inputs):
+        value, advantage, action_mask = inputs
+        action_mask = tf.cast(action_mask > 0.0, advantage.dtype)
+        legal_count = tf.reduce_sum(action_mask, axis=1, keepdims=True)
+        legal_count = tf.maximum(legal_count, tf.constant(1.0, dtype=advantage.dtype))
+        legal_advantage_mean = (
+            tf.reduce_sum(advantage * action_mask, axis=1, keepdims=True) / legal_count
+        )
+        return value + advantage - legal_advantage_mean
+
+
 class DQNAgent:
     def __init__(
         self,
@@ -42,8 +55,13 @@ class DQNAgent:
         self.update_target_model()
 
     def _build_model(self):
-        inputs = tf.keras.Input(shape=(self.state_size,))
-        hidden = tf.keras.layers.Dense(256, activation="relu")(inputs)
+        state_input = tf.keras.Input(shape=(self.state_size,), name="state")
+        action_mask_input = tf.keras.Input(
+            shape=(self.action_count,),
+            name="action_mask",
+            dtype=tf.float32,
+        )
+        hidden = tf.keras.layers.Dense(256, activation="relu")(state_input)
         hidden = tf.keras.layers.Dense(256, activation="relu")(hidden)
         hidden = tf.keras.layers.Dense(128, activation="relu")(hidden)
 
@@ -52,8 +70,8 @@ class DQNAgent:
         advantage_stream = tf.keras.layers.Dense(64, activation="relu")(hidden)
         advantage = tf.keras.layers.Dense(self.action_count, activation="linear")(advantage_stream)
 
-        q_values = DuelingQValues()([value, advantage])
-        model = tf.keras.Model(inputs=inputs, outputs=q_values)
+        q_values = MaskedDuelingQValues()([value, advantage, action_mask_input])
+        model = tf.keras.Model(inputs=[state_input, action_mask_input], outputs=q_values)
         self.compile_model(model)
         return model
 
@@ -106,7 +124,10 @@ class DQNAgent:
                 "selection_mode": "epsilon_uniform",
             }
 
-        q_values = self._predict_q_values(np.array([state], dtype=np.float32))[0]
+        q_values = self._predict_q_values(
+            np.array([state], dtype=np.float32),
+            np.array([action_mask], dtype=np.bool_),
+        )[0]
         greedy_action, greedy_q_value, q_margin = self._select_greedy_action(q_values, legal_actions)
 
         rank_sampling_allowed = (
@@ -146,7 +167,10 @@ class DQNAgent:
         if not legal_actions:
             raise RuntimeError("No legal actions available.")
 
-        q_values = self._predict_q_values(np.array([state], dtype=np.float32))[0]
+        q_values = self._predict_q_values(
+            np.array([state], dtype=np.float32),
+            np.array([action_mask], dtype=np.bool_),
+        )[0]
         return self._select_greedy_action(q_values, legal_actions)
 
     def train_on_batch(self, transitions, sample_weights=None):
@@ -159,16 +183,29 @@ class DQNAgent:
             [transition.next_action_mask for transition in transitions],
             dtype=np.bool_,
         )
+        action_masks = np.array(
+            [
+                transition.action_mask
+                if transition.action_mask is not None
+                else [True] * self.action_count
+                for transition in transitions
+            ],
+            dtype=np.bool_,
+        )
 
-        current_q_values = self._predict_q_values(states)
-        next_online_q_values = self._predict_q_values(next_states)
+        current_q_values = self._predict_q_values(states, action_masks)
+        next_online_q_values = self._predict_q_values(next_states, next_action_masks)
         masked_next_online_q_values = np.where(next_action_masks, next_online_q_values, -1.0e9)
         best_next_actions = self._batch_select_greedy_actions(
             masked_next_online_q_values,
             next_action_masks,
         )
 
-        next_target_q_values = self._predict_q_values(next_states, model=self.target_model)
+        next_target_q_values = self._predict_q_values(
+            next_states,
+            next_action_masks,
+            model=self.target_model,
+        )
         best_next_q_values = next_target_q_values[np.arange(len(transitions)), best_next_actions]
         best_next_q_values = np.where(dones, 0.0, best_next_q_values)
 
@@ -202,7 +239,7 @@ class DQNAgent:
             sample_weights = np.array(sample_weights, dtype=np.float32)
 
         history = self.model.fit(
-            states,
+            [states, action_masks.astype(np.float32)],
             target_q_values,
             sample_weight=sample_weights,
             epochs=1,
@@ -234,9 +271,15 @@ class DQNAgent:
     def save(self, path):
         self.model.save(path)
 
-    def _predict_q_values(self, states, model=None):
+    def _predict_q_values(self, states, action_masks, model=None):
         model = model or self.model
-        return model(states, training=False).numpy()
+        return model(
+            [
+                np.array(states, dtype=np.float32),
+                np.array(action_masks, dtype=np.float32),
+            ],
+            training=False,
+        ).numpy()
 
     def _legal_actions(self, action_mask):
         return [index for index, allowed in enumerate(action_mask) if allowed]

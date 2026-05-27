@@ -24,7 +24,7 @@ WIN_LEVEL = 50
 TRAINING_STATE_FILENAME = "mathcard_dqn_state.json"
 REPLAY_BUFFER_FILENAME = "mathcard_replay_buffer.npz"
 REWARD_VERSION = "boss_reward_v4_deck_balance"
-MODEL_VERSION = f"{ENCODER_VERSION}_{REWARD_VERSION}_dueling_dqn_v1"
+MODEL_VERSION = f"{ENCODER_VERSION}_{REWARD_VERSION}_masked_dueling_dqn_v1"
 
 
 def parse_args():
@@ -143,6 +143,7 @@ def replay_metadata():
         "action_count": ACTION_COUNT,
         "encoder_version": ENCODER_VERSION,
         "reward_version": REWARD_VERSION,
+        "has_action_masks": True,
     }
 
 

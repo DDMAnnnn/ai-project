@@ -11,7 +11,7 @@ from boss_logging import (
     format_boss_q_summary,
     update_boss_stats,
 )
-from dqn_agent import DuelingQValues  # noqa: F401 - registers the saved custom layer.
+from dqn_agent import DuelingQValues, MaskedDuelingQValues  # noqa: F401 - registers saved layers.
 from mathcard_vector_env import MathCardVectorEnv
 from observation_encoder import VECTOR_SIZE
 
@@ -43,7 +43,7 @@ def default_model_path():
 
 
 def greedy_action_info(model, state, action_mask, argmax_tie_epsilon):
-    q_values = q_values_for_state(model, state)
+    q_values = q_values_for_state(model, state, action_mask)
     action, q_value, q_margin = select_greedy_action(
         q_values,
         action_mask,
@@ -69,8 +69,16 @@ def select_greedy_action(q_values, action_mask, argmax_tie_epsilon):
     return action, float(q_values[action]), best_q_value - second_q_value
 
 
-def q_values_for_state(model, state):
-    return model(np.array([state], dtype=np.float32), training=False).numpy()[0]
+def model_uses_action_mask(model):
+    return len(model.inputs) > 1
+
+
+def q_values_for_state(model, state, action_mask):
+    state_batch = np.array([state], dtype=np.float32)
+    if model_uses_action_mask(model):
+        mask_batch = np.array([action_mask], dtype=np.float32)
+        return model([state_batch, mask_batch], training=False).numpy()[0]
+    return model(state_batch, training=False).numpy()[0]
 
 
 def describe_action(action):
@@ -282,7 +290,7 @@ def main():
             done = False
 
             for step in range(1, args.max_steps + 1):
-                q_values = q_values_for_state(model, state)
+                q_values = q_values_for_state(model, state, action_mask)
                 action, q_value, q_margin = select_greedy_action(
                     q_values,
                     action_mask,

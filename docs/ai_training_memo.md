@@ -10,6 +10,11 @@
 ## Already Implemented
 
 - Dueling DQN.
+- Masked dueling DQN:
+  - model takes the action mask as a second input;
+  - dueling advantage mean excludes illegal actions;
+  - model version bumped to `masked_dueling_dqn_v1`.
+  - replay metadata now requires stored action masks.
 - Prioritized replay as a switch, default on.
 - Boss diagnostics by boss level: L10/L20/L30/L40/L50 clear and damage average.
 - Reward spike diagnostics and optional stop-on-spike.
@@ -25,17 +30,10 @@
 
 ## Agreed But Not Implemented
 
-### Masked Dueling / Illegal Q Control
-
-- Current action masks prevent illegal actions from being selected, but illegal Q values can still drift.
-- Because dueling networks subtract a mean advantage term, drifting illegal actions can pollute legal-action values.
-- Preferred next architecture change: masked dueling, where illegal actions are excluded from the dueling aggregation and Q target selection.
-- This requires a new model architecture/version and should be paired with clean retraining.
-
 ### Reward Structure Review
 
 - Current reward can become positive around level 20, which may make the model comfortable stabilizing at 20-30 instead of pushing to 50.
-- After masked dueling is in place, re-check:
+- After clean masked-dueling retraining, re-check:
   - battle clear vs boss clear reward;
   - death/missing-level penalty;
   - level 30/40/50 incentive spacing;
@@ -138,10 +136,9 @@ Recommended first implementation, if we choose to build it later:
 
 ## Next Recommended Order
 
-1. Implement masked dueling and bump model version.
-2. Start clean training with the new reward version and optional human demo seed.
-3. Re-evaluate level distribution, Q scale, illegal Q drift, and boss L20/L30/L40 clears.
-4. Tune reward structure if the model still settles around 20-30.
-5. Consider NoisyNet once the base model is stable.
-6. Use deck predictor after more high-level or victory data exists.
-7. Prototype shallow lookahead in eval/watch if decisions still look locally good but strategically weak.
+1. Start clean masked-dueling training with the new reward version and optional human demo seed.
+2. Re-evaluate level distribution, Q scale, illegal Q drift, and boss L20/L30/L40 clears.
+3. Tune reward structure if the model still settles around 20-30.
+4. Consider NoisyNet once the base model is stable.
+5. Use deck predictor after more high-level or victory data exists.
+6. Prototype shallow lookahead in eval/watch if decisions still look locally good but strategically weak.
